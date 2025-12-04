@@ -1,0 +1,110 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "isp-checker.fullname" . }}-network-policy
+  labels:
+    {{- include "isp-checker.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "isp-checker.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Allow traffic from ingress controller
+    {{- if .Values.networkPolicy.allowIngressController }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: {{ .Values.networkPolicy.ingressNamespace | default "ingress-nginx" }}
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressSelector | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 8000
+        {{- if .Values.ui.enabled }}
+        - protocol: TCP
+          port: 80
+        {{- end }}
+    {{- end }}
+
+    # Allow traffic from within the same namespace
+    {{- if .Values.networkPolicy.allowSameNamespace }}
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8000
+        {{- if .Values.ui.enabled }}
+        - protocol: TCP
+          port: 80
+        {{- end }}
+    {{- end }}
+
+    # Allow Prometheus scraping
+    {{- if .Values.networkPolicy.allowPrometheus }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: {{ .Values.networkPolicy.prometheusNamespace | default "monitoring" }}
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 8000
+    {{- end }}
+
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # Allow database connections
+    {{- if .Values.networkPolicy.allowDatabase }}
+    - to:
+        {{- if .Values.networkPolicy.databasePodSelector }}
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.databasePodSelector | nindent 14 }}
+        {{- else }}
+        - podSelector:
+            matchLabels:
+              app: postgresql
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.databasePort | default 5432 }}
+    {{- end }}
+
+    # Allow external network access (for health checks to external targets)
+    {{- if .Values.networkPolicy.allowExternalAccess }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: ICMP
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 443
+    {{- end }}
+{{- end }}

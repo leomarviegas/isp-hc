@@ -156,8 +156,36 @@ func selectProbes(mode string) []probeFunc {
 		return []probeFunc{probes.RunDNS}
 	case "traceroute":
 		return []probeFunc{probes.RunTraceroute}
+	case "interface", "interface_stats":
+		return []probeFunc{probes.RunInterfaceStats}
+	case "tcp", "tcp_stats":
+		return []probeFunc{probes.RunTCPStats}
+	case "socket", "socket_stats":
+		return []probeFunc{probes.RunSocketStats}
+	case "capture", "packet_capture":
+		return []probeFunc{probes.RunPacketCapture}
+	case "packet", "packet_health":
+		// All packet health probes (interface + TCP + socket + capture)
+		return []probeFunc{
+			probes.RunInterfaceStats,
+			probes.RunTCPStats,
+			probes.RunSocketStats,
+			probes.RunPacketCapture,
+		}
 	case "full", "default", "":
+		// Basic connectivity probes
 		return []probeFunc{probes.RunPing, probes.RunDNS, probes.RunTraceroute}
+	case "comprehensive", "all":
+		// All probes including packet health
+		return []probeFunc{
+			probes.RunPing,
+			probes.RunDNS,
+			probes.RunTraceroute,
+			probes.RunInterfaceStats,
+			probes.RunTCPStats,
+			probes.RunSocketStats,
+			probes.RunPacketCapture,
+		}
 	default:
 		return nil
 	}

@@ -1,7 +1,13 @@
+# ISP Health Checker - CLI Dockerfile
+# Multi-stage build for minimal production image
+
 # Stage 1: Build the Go binary
-FROM golang:1.19-alpine AS builder
+FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates
 
 # Copy Go modules and download dependencies
 COPY src/cli/go.mod src/cli/go.sum ./
@@ -10,18 +16,42 @@ RUN go mod download
 # Copy the source code
 COPY src/cli/ .
 
-# Build the Go app
-RUN CGO_ENABLED=0 GOOS=linux go build -o /isp-checker .
+# Build the Go app with security flags
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" \
+    -o /isp-checker .
 
-# Stage 2: Create the final image
-FROM alpine:latest
+# Stage 2: Create minimal production image
+FROM alpine:3.19
 
-WORKDIR /root/
+# Install CA certificates and network tools for all probe types
+RUN apk --no-cache add \
+    ca-certificates \
+    iputils \
+    bind-tools \
+    traceroute \
+    # Packet health probe requirements:
+    tcpdump \
+    iproute2 \
+    procps
+
+# Create non-root user (packet capture requires capabilities, not root)
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+WORKDIR /app
 
 # Copy the binary from the builder stage
 COPY --from=builder /isp-checker .
 
-# (Optional) Install network tools if pure Go implementation is not ready
-RUN apk --no-cache add iputils traceroute
+# Note: For packet health probes, run with:
+#   --cap-add=NET_RAW --cap-add=NET_ADMIN
+# For full host network visibility:
+#   --network=host
+# Or mount proc for interface stats:
+#   -v /proc:/host/proc:ro -e HOST_PROC=/host/proc
+
+# Default to non-root user (works for basic probes)
+# For packet capture, override with --user root or use capabilities
+USER appuser
 
 ENTRYPOINT ["./isp-checker"]

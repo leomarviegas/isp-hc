@@ -1,0 +1,51 @@
+# Docker Compose override for Packet Health Analysis mode
+# Usage: docker compose -f docker-compose.yml -f docker-compose.packet-health.yml up
+#
+# This adds the CLI service with packet health analysis capabilities:
+# - Interface stats (CRC errors, frame errors, drops)
+# - TCP stats (retransmissions, reordering)
+# - Packet capture (deep inspection)
+
+services:
+  # CLI service for running health checks with packet analysis
+  cli:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cli
+    # Required capabilities for packet health probes
+    cap_add:
+      - NET_RAW      # For ping and packet capture
+      - NET_ADMIN    # For network interface access
+    # Mount host /proc and /sys for reading kernel statistics
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    environment:
+      - HOST_PROC=/host/proc
+      - HOST_SYS=/host/sys
+    # Use host network for accurate interface readings (optional but recommended)
+    # Uncomment if you need to see host network interfaces:
+    # network_mode: host
+    depends_on:
+      - backend
+    # Default command runs a comprehensive health check
+    command: ["--mode", "comprehensive", "--target", "8.8.8.8"]
+
+  # Alternative: CLI with host network mode for full visibility
+  cli-host-network:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cli
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    network_mode: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    environment:
+      - HOST_PROC=/host/proc
+      - HOST_SYS=/host/sys
+    profiles:
+      - host-network  # Only start with: docker compose --profile host-network up
+    command: ["--mode", "packet", "--target", "8.8.8.8"]

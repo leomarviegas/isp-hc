@@ -13,44 +13,63 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+
+# Container Security Context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
 service:
   type: ClusterIP
   port: 80
+  targetPort: 8000
 
 ingress:
   enabled: false
-  className: ""
-  annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
   hosts:
-    - host: chart-example.local
+    - host: isp-checker.example.com
       paths:
         - path: /
-          pathType: ImplementationSpecific
+          pathType: Prefix
   tls: []
-  #  - secretName: chart-example-tls
+  #  - secretName: isp-checker-tls
   #    hosts:
-  #      - chart-example.local
+  #      - isp-checker.example.com
 
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the
-  # following lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
 
 autoscaling:
   enabled: false
   minReplicas: 1
   maxReplicas: 10
   targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
 
 nodeSelector: {}
 
@@ -58,10 +77,33 @@ tolerations: []
 
 affinity: {}
 
+# Application configuration (via ConfigMap)
+config:
+  logLevel: "info"
+  runsDir: "/app/runs"
+  workerCount: "10"
+  corsOrigins: "*"
+  metricsEnabled: "true"
+  rateLimit:
+    requests: "100"
+    window: "60"
+
+# Secrets configuration
+secrets:
+  create: true
+  # Base64 encoded values will be stored in the secret
+  # Set these via --set secrets.databaseUrl="..." or in a separate values file
+  databaseUrl: ""
+  apiKey: ""
+
 # Database configuration
 database:
-  url: "postgresql://user:password@postgres-service/isp_health_checker"
+  # Use existing secret instead of creating one
+  existingSecret: ""
   secretName: "db-credentials"
+  url: "postgresql://user:password@postgres-service:5432/isp_health_checker"
+  username: ""
+  password: ""
 
 # UI configuration
 ui:
@@ -69,3 +111,86 @@ ui:
   image:
     repository: your-repo/isp-checker-ui
     tag: "latest"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# CLI configuration (for CronJob health checks)
+cli:
+  enabled: false
+  image:
+    repository: your-repo/isp-checker-cli
+    tag: "latest"
+  schedule: "*/15 * * * *"  # Every 15 minutes
+  targets:
+    - "8.8.8.8"
+    - "1.1.1.1"
+
+# Packet Health Analysis Configuration
+# Enables deep packet inspection probes (interface stats, TCP stats, packet capture)
+# WARNING: Requires elevated privileges - only enable if needed
+packetHealth:
+  enabled: false
+  # Use host network namespace for accurate network stats
+  # This is more intrusive but provides real host-level visibility
+  hostNetwork: false
+
+# Network Policy
+networkPolicy:
+  enabled: true
+  allowIngressController: true
+  ingressNamespace: "ingress-nginx"
+  ingressSelector:
+    app.kubernetes.io/name: ingress-nginx
+  allowSameNamespace: true
+  allowPrometheus: true
+  prometheusNamespace: "monitoring"
+  allowDatabase: true
+  databasePodSelector:
+    app: postgresql
+  databasePort: 5432
+  allowExternalAccess: true  # Required for health check probes
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Probes configuration
+probes:
+  liveness:
+    enabled: true
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: /ready
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Extra environment variables
+extraEnv: []
+  # - name: EXTRA_VAR
+  #   value: "extra-value"
+
+# Extra volume mounts
+extraVolumeMounts: []
+
+# Extra volumes
+extraVolumes: []
+
+# Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"

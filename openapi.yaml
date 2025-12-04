@@ -1,41 +1,383 @@
 openapi: 3.0.3
 info:
   title: ISP Health Checker API
-  version: "0.1"
+  description: |
+    API for running and retrieving ISP network health checks.
+    Supports ping, DNS, and traceroute probes with AI-powered diagnosis.
+  version: "1.0.0"
+  contact:
+    name: ISP Health Checker Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development
+  - url: https://api.isp-checker.example.com/api/v1
+    description: Production
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: Runs
+    description: Health check run operations
+  - name: Health
+    description: Service health endpoints
+
 paths:
   /runs:
+    get:
+      tags:
+        - Runs
+      summary: List health check runs
+      description: Retrieve a paginated list of health check runs, optionally filtered by target.
+      operationId: listRuns
+      security:
+        - ApiKeyAuth: []
+        - {}
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of runs to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of runs to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: target
+          in: query
+          description: Filter runs by target host/IP
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunSummary'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
     post:
-      summary: Start or submit a run result
+      tags:
+        - Runs
+      summary: Submit or start a health check run
+      description: |
+        Submit a completed run with probe results, or start a new background health check.
+        If probes array is empty or missing, initiates a background check.
+      operationId: submitRun
+      security:
+        - ApiKeyAuth: []
+        - {}
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Run'
+              $ref: '#/components/schemas/RunInput'
       responses:
-        '201':
-          description: Run stored
-  /runs/{id}:
+        '202':
+          description: Run accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunAccepted'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /runs/{run_id}:
     get:
-      summary: Retrieve a run
+      tags:
+        - Runs
+      summary: Get run details
+      description: Retrieve full details of a specific health check run including probes and diagnosis.
+      operationId: getRun
+      security:
+        - ApiKeyAuth: []
+        - {}
       parameters:
-        - name: id
+        - name: run_id
+          in: path
+          required: true
+          description: Unique run identifier (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /runs/{run_id}/raw:
+    get:
+      tags:
+        - Runs
+      summary: Get raw probe output
+      description: Retrieve raw command output from probe execution.
+      operationId: getRunRaw
+      security:
+        - ApiKeyAuth: []
+        - {}
+      parameters:
+        - name: run_id
           in: path
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         '200':
-          description: Run retrieved
+          description: Raw output
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+                example:
+                  ping_output: "PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data..."
+                  dns_output: "Server: 8.8.8.8\nAddress: 8.8.8.8#53..."
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /runs/{run_id}/probes:
+    get:
+      tags:
+        - Runs
+      summary: Get probe results
+      description: Retrieve individual probe results for a run.
+      operationId: getRunProbes
+      security:
+        - ApiKeyAuth: []
+        - {}
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Probe results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Probe'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Simple health check endpoint.
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: isp-checker-backend
+
+  /ready:
+    get:
+      tags:
+        - Health
+      summary: Readiness check
+      description: Check if service is ready to accept requests.
+      operationId: readinessCheck
+      security: []
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ready, degraded]
+                  database:
+                    type: string
+                    enum: [connected, disconnected]
+                  active_workers:
+                    type: integer
+
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication (optional for read operations)
+
   schemas:
+    RunInput:
+      type: object
+      required:
+        - target
+        - mode
+        - score
+        - summary
+      properties:
+        target:
+          type: string
+          description: Target host or IP address
+          example: "8.8.8.8"
+        mode:
+          type: string
+          enum: [full, ping, dns, traceroute]
+          description: Health check mode
+          example: "full"
+        score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Overall health score (0-100)
+          example: 95.0
+        summary:
+          type: string
+          description: Human-readable summary
+          example: "Connection appears healthy."
+        probes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeInput'
+        diagnosis:
+          type: array
+          items:
+            $ref: '#/components/schemas/Diagnosis'
+        raw:
+          type: object
+          additionalProperties:
+            type: string
+          description: Raw command outputs
+
+    ProbeInput:
+      type: object
+      required:
+        - name
+        - status
+      properties:
+        name:
+          type: string
+          enum: [ping, dns, traceroute]
+        status:
+          type: string
+          enum: [OK, WARN, CRIT, UNKNOWN]
+        details:
+          type: object
+          additionalProperties: true
+
     Run:
       type: object
       properties:
         run_id:
           type: string
+          format: uuid
         timestamp:
           type: string
+          format: date-time
+        target:
+          type: string
+        mode:
+          type: string
+          enum: [full, ping, dns, traceroute]
+        score:
+          type: number
+          format: float
+        summary:
+          type: string
+        probes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Probe'
+        diagnosis:
+          type: array
+          items:
+            $ref: '#/components/schemas/Diagnosis'
+
+    RunSummary:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
         target:
           type: string
         mode:
@@ -44,7 +386,79 @@ components:
           type: number
         summary:
           type: string
-        probes:
+
+    Probe:
+      type: object
+      properties:
+        name:
+          type: string
+          enum: [ping, dns, traceroute]
+        status:
+          type: string
+          enum: [OK, WARN, CRIT, UNKNOWN]
+        details:
+          type: object
+          additionalProperties: true
+          example:
+            latency_ms: 25.5
+            packets_sent: 3
+            packets_received: 3
+            packet_loss: 0
+
+    Diagnosis:
+      type: object
+      properties:
+        component:
+          type: string
+          enum: [LocalNetwork, DNS, Transit, Upstream, Target]
+          description: Network component being diagnosed
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Confidence score (0-1)
+        explanation:
+          type: string
+          description: Human-readable explanation
+        suggested_action:
+          type: string
+          description: Recommended action to resolve issues
+
+    RunAccepted:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [accepted, pending]
+        message:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Error message
+
+    ValidationError:
+      type: object
+      properties:
+        detail:
           type: array
           items:
             type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  oneOf:
+                    - type: string
+                    - type: integer
+              msg:
+                type: string
+              type:
+                type: string

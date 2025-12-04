@@ -5,43 +5,174 @@ metadata:
   labels:
     {{- include "isp-checker.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "isp-checker.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       labels:
         {{- include "isp-checker.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "isp-checker.fullname" . }}
+      {{- end }}
+      {{- if .Values.packetHealth.hostNetwork }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          {{- if .Values.packetHealth.enabled }}
+          securityContext:
+            capabilities:
+              add:
+                - NET_RAW
+                - NET_ADMIN
+            {{- with .Values.securityContext }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- else }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
               containerPort: 8000
               protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "isp-checker.fullname" . }}-config
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.database.secretName }}
-                  key: url
+                  {{- if .Values.database.existingSecret }}
+                  name: {{ .Values.database.existingSecret }}
+                  {{- else if .Values.secrets.create }}
+                  name: {{ include "isp-checker.fullname" . }}-secrets
+                  {{- else }}
+                  name: {{ .Values.database.secretName | default (printf "%s-db" (include "isp-checker.fullname" .)) }}
+                  {{- end }}
+                  key: {{ if .Values.secrets.create }}DATABASE_URL{{ else }}url{{ end }}
+            {{- if .Values.secrets.apiKey }}
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "isp-checker.fullname" . }}-secrets
+                  key: API_KEY
+            {{- end }}
+            {{- if .Values.packetHealth.enabled }}
+            - name: HOST_PROC
+              value: /host/proc
+            - name: HOST_SYS
+              value: /host/sys
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.probes.liveness.enabled }}
           livenessProbe:
             httpGet:
-              path: /
+              path: {{ .Values.probes.liveness.path }}
               port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
           readinessProbe:
             httpGet:
-              path: /
+              path: {{ .Values.probes.readiness.path }}
               port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-{{- if .Values.ui.enabled }}
+          volumeMounts:
+            - name: runs-data
+              mountPath: /app/runs
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.packetHealth.enabled }}
+            - name: host-proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: host-sys
+              mountPath: /host/sys
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- if .Values.ui.enabled }}
         - name: ui
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: "{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: ui-http
               containerPort: 80
-{{- end }}
+              protocol: TCP
+          {{- with .Values.ui.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+      volumes:
+        - name: runs-data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.packetHealth.enabled }}
+        - name: host-proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: host-sys
+          hostPath:
+            path: /sys
+            type: Directory
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
