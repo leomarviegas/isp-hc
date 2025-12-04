@@ -1,0 +1,50 @@
+openapi: 3.0.3
+info:
+  title: ISP Health Checker API
+  version: "0.1"
+paths:
+  /runs:
+    post:
+      summary: Start or submit a run result
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Run'
+      responses:
+        '201':
+          description: Run stored
+  /runs/{id}:
+    get:
+      summary: Retrieve a run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Run retrieved
+components:
+  schemas:
+    Run:
+      type: object
+      properties:
+        run_id:
+          type: string
+        timestamp:
+          type: string
+        target:
+          type: string
+        mode:
+          type: string
+        score:
+          type: number
+        summary:
+          type: string
+        probes:
+          type: array
+          items:
+            type: object

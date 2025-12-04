@@ -1,0 +1,27 @@
+# Stage 1: Build the Go binary
+FROM golang:1.19-alpine AS builder
+
+WORKDIR /app
+
+# Copy Go modules and download dependencies
+COPY src/cli/go.mod src/cli/go.sum ./
+RUN go mod download
+
+# Copy the source code
+COPY src/cli/ .
+
+# Build the Go app
+RUN CGO_ENABLED=0 GOOS=linux go build -o /isp-checker .
+
+# Stage 2: Create the final image
+FROM alpine:latest
+
+WORKDIR /root/
+
+# Copy the binary from the builder stage
+COPY --from=builder /isp-checker .
+
+# (Optional) Install network tools if pure Go implementation is not ready
+RUN apk --no-cache add iputils traceroute
+
+ENTRYPOINT ["./isp-checker"]

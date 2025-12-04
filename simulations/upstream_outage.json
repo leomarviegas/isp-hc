@@ -1,0 +1,72 @@
+{
+  "run_id": "c3d4e5f6-a7b8-9012-3456-7890abcdef12",
+  "timestamp": "2025-12-03T14:05:00Z",
+  "target": "8.8.8.8",
+  "mode": "simulation",
+  "score": 98.0,
+  "summary": "Critical upstream outage. Target is unreachable and DNS resolution is failing.",
+  "probes": [
+    {
+      "name": "ping",
+      "status": "CRIT",
+      "details": {
+        "packets_sent": 100,
+        "packets_received": 0,
+        "loss_percent": 100.0,
+        "error": "Host unreachable"
+      }
+    },
+    {
+      "name": "traceroute",
+      "status": "CRIT",
+      "details": {
+        "hop_count": 3,
+        "hops": [
+          {"hop": 1, "ip": "192.168.1.1", "rtt": 1.0},
+          {"hop": 2, "ip": "100.64.0.1", "rtt": 5.2},
+          {"hop": 3, "ip": "*", "rtt": null, "error": "Request timed out."}
+        ],
+        "error": "Failed to reach target"
+      }
+    },
+    {
+      "name": "dns",
+      "status": "CRIT",
+      "details": {
+        "error": "DNS query timed out after 3 attempts."
+      }
+    },
+    {
+      "name": "http",
+      "status": "CRIT",
+      "details": {
+        "error": "Could not resolve host: 8.8.8.8"
+      }
+    },
+    {
+      "name": "speedtest",
+      "status": "NA",
+      "details": {}
+    },
+    {
+      "name": "bgp",
+      "status": "NA",
+      "details": {}
+    }
+  ],
+  "diagnosis": [
+    {
+      "component": "Upstream",
+      "confidence": 0.99,
+      "explanation": "Complete failure to reach the target. All outbound probes (ping, traceroute, dns, http) are failing beyond the local ISP gateway (hop 2). This indicates a major ISP or transit provider outage.",
+      "suggested_action": "Contact your ISP's support immediately. There is a high probability of a widespread outage."
+    },
+    {
+      "component": "DNS",
+      "confidence": 0.95,
+      "explanation": "DNS resolution is failing, likely as a symptom of the broader upstream outage.",
+      "suggested_action": "Confirm DNS failure is part of the larger outage. No separate action needed until primary connectivity is restored."
+    }
+  ],
+  "raw": {}
+}

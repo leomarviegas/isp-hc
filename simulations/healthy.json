@@ -1,0 +1,76 @@
+{
+  "run_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+  "timestamp": "2025-12-03T10:00:00Z",
+  "target": "8.8.8.8",
+  "mode": "simulation",
+  "score": 8.0,
+  "summary": "Connection appears healthy. Low latency and no packet loss detected.",
+  "probes": [
+    {
+      "name": "ping",
+      "status": "OK",
+      "details": {
+        "packets_sent": 50,
+        "packets_received": 50,
+        "loss_percent": 0.0,
+        "latency_min_ms": 8.1,
+        "latency_avg_ms": 10.5,
+        "latency_max_ms": 15.2
+      }
+    },
+    {
+      "name": "traceroute",
+      "status": "OK",
+      "details": {
+        "hop_count": 9,
+        "hops": [
+          {"hop": 1, "ip": "192.168.1.1", "rtt": 0.8},
+          {"hop": 2, "ip": "100.64.0.1", "rtt": 4.2},
+          {"hop": 9, "ip": "8.8.8.8", "rtt": 10.4}
+        ]
+      }
+    },
+    {
+      "name": "dns",
+      "status": "OK",
+      "details": {
+        "resolved_ip": "8.8.8.8",
+        "resolution_time_ms": 12
+      }
+    },
+    {
+      "name": "http",
+      "status": "OK",
+      "details": {
+        "status_code": 200,
+        "response_time_ms": 95,
+        "content_length": 4096
+      }
+    },
+    {
+      "name": "speedtest",
+      "status": "NA",
+      "details": {}
+    },
+    {
+      "name": "bgp",
+      "status": "NA",
+      "details": {}
+    }
+  ],
+  "diagnosis": [
+    {
+      "component": "LocalNetwork",
+      "confidence": 0.95,
+      "explanation": "Connectivity to the local gateway is stable and fast.",
+      "suggested_action": "None"
+    },
+    {
+      "component": "Upstream",
+      "confidence": 0.9,
+      "explanation": "End-to-end connectivity to the target is healthy.",
+      "suggested_action": "None"
+    }
+  ],
+  "raw": {}
+}

@@ -1,0 +1,29 @@
+version: "3.8"
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./runs:/app/runs
+    environment:
+      - RUNS_DIR=/app/runs
+  cli:
+    build:
+      context: .
+      dockerfile: docker/cli.Dockerfile
+    command: ["serve", "--addr", ":9100"]
+    ports:
+      - "9100:9100"
+    volumes:
+      - ./simulations:/simulations:ro
+  ui:
+    build:
+      context: .
+      dockerfile: docker/ui.Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend

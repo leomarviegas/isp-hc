@@ -1,0 +1,71 @@
+{
+  "run_id": "b2c3d4e5-f6a7-8901-2345-67890abcdef1",
+  "timestamp": "2025-12-03T11:30:00Z",
+  "target": "1.1.1.1",
+  "mode": "simulation",
+  "score": 55.0,
+  "summary": "Intermittent packet loss and latency spikes detected in transit path.",
+  "probes": [
+    {
+      "name": "ping",
+      "status": "WARN",
+      "details": {
+        "packets_sent": 100,
+        "packets_received": 94,
+        "loss_percent": 6.0,
+        "latency_min_ms": 12.0,
+        "latency_avg_ms": 85.3,
+        "latency_max_ms": 210.1
+      }
+    },
+    {
+      "name": "traceroute",
+      "status": "WARN",
+      "details": {
+        "hop_count": 8,
+        "hops": [
+          {"hop": 1, "ip": "192.168.1.1", "rtt": 1.2},
+          {"hop": 5, "ip": "203.0.113.1", "rtt": 90.5, "loss": 0.0},
+          {"hop": 6, "ip": "198.51.100.5", "rtt": 195.2, "loss": 8.0},
+          {"hop": 8, "ip": "1.1.1.1", "rtt": 198.0, "loss": 6.0}
+        ]
+      }
+    },
+    {
+      "name": "dns",
+      "status": "OK",
+      "details": {
+        "resolved_ip": "1.1.1.1",
+        "resolution_time_ms": 25
+      }
+    },
+    {
+      "name": "http",
+      "status": "OK",
+      "details": {
+        "status_code": 200,
+        "response_time_ms": 250,
+        "content_length": 5120
+      }
+    },
+    {
+      "name": "speedtest",
+      "status": "NA",
+      "details": {}
+    },
+    {
+      "name": "bgp",
+      "status": "NA",
+      "details": {}
+    }
+  ],
+  "diagnosis": [
+    {
+      "component": "Peering/Transit",
+      "confidence": 0.85,
+      "explanation": "Significant packet loss (8%) and high latency (195ms) detected starting at hop 6 (198.51.100.5). This suggests an issue with a transit provider.",
+      "suggested_action": "Report the issue to your ISP and provide the traceroute data, pointing to the problematic hop."
+    }
+  ],
+  "raw": {}
+}

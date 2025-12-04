@@ -1,0 +1,35 @@
+{
+  "run_id": "b792abcc-c106-493e-b8e7-4e509238939d",
+  "timestamp": "2025-12-03T21:01:36Z",
+  "target": "203.0.113.45",
+  "mode": "simulation",
+  "score": 48.5,
+  "summary": "Intermittent loss across mid-path hops",
+  "probes": [
+    {
+      "name": "ping",
+      "status": "WARN",
+      "details": {
+        "loss_percent": 5,
+        "rtt_ms": 95
+      }
+    },
+    {
+      "name": "traceroute",
+      "status": "WARN",
+      "details": {
+        "hops": 12,
+        "loss_hop": 6
+      }
+    }
+  ],
+  "diagnosis": [
+    {
+      "component": "Peering",
+      "confidence": 0.78,
+      "explanation": "Loss concentrated on AS path near IX",
+      "suggested_action": "Contact ISP peering ops"
+    }
+  ],
+  "raw": {}
+}

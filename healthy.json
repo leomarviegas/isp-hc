@@ -1,0 +1,35 @@
+{
+  "run_id": "fe94a146-9903-42ab-8418-321581091c99",
+  "timestamp": "2025-12-03T21:01:36Z",
+  "target": "8.8.8.8",
+  "mode": "simulation",
+  "score": 3.0,
+  "summary": "Healthy \u2014 minor jitter",
+  "probes": [
+    {
+      "name": "ping",
+      "status": "OK",
+      "details": {
+        "loss_percent": 0,
+        "rtt_ms": 18.2
+      }
+    },
+    {
+      "name": "traceroute",
+      "status": "OK",
+      "details": {
+        "hops": 8,
+        "max_rtt_ms": 22
+      }
+    }
+  ],
+  "diagnosis": [
+    {
+      "component": "Transit",
+      "confidence": 0.95,
+      "explanation": "No packet loss across backbone",
+      "suggested_action": "No action"
+    }
+  ],
+  "raw": {}
+}
