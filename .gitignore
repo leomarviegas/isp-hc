@@ -3,5 +3,6 @@ codex_prompt.md
 gemini_prompt.md
 
 .claude/
-.github/*
 .pytest_cache/
+.github
+.github/workflows
