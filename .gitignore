@@ -1,0 +1,7 @@
+claude_prompt.md
+codex_prompt.md
+gemini_prompt.md
+
+.claude/
+.github/*
+.pytest_cache/
