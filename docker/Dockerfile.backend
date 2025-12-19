@@ -1,8 +1,28 @@
 # ISP Health Checker - Backend Dockerfile
 # Multi-stage build for security and size optimization
 
-# Stage 1: Build dependencies
-FROM python:3.11-slim AS builder
+# Stage 1: Build the Go CLI
+FROM golang:1.21-alpine AS cli-builder
+
+WORKDIR /cli
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates
+
+# Copy Go modules and download dependencies
+COPY src/cli/go.mod src/cli/go.sum ./
+RUN go mod download
+
+# Copy the source code
+COPY src/cli/ .
+
+# Build the Go CLI with security flags
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-w -s -X main.version=docker" \
+    -o /isp-checker .
+
+# Stage 2: Build Python dependencies
+FROM python:3.11-slim AS py-builder
 
 WORKDIR /app
 
@@ -16,7 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY src/backend/requirements.txt .
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.txt
 
-# Stage 2: Production image
+# Stage 3: Production image
 FROM python:3.11-slim
 
 # Create non-root user for security
@@ -24,14 +44,24 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 WORKDIR /app
 
-# Install runtime dependencies only
+# Install runtime dependencies including network tools for probes
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    iputils-ping \
+    dnsutils \
+    traceroute \
+    iproute2 \
+    tcpdump \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy wheels and install
-COPY --from=builder /app/wheels /wheels
+COPY --from=py-builder /app/wheels /wheels
 RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
+
+# Copy the Go CLI binary
+COPY --from=cli-builder /isp-checker /usr/local/bin/isp-checker
+RUN chmod +x /usr/local/bin/isp-checker
 
 # Copy application code
 COPY src/backend/ .
@@ -42,10 +72,12 @@ RUN mkdir -p /app/runs && chown -R appuser:appuser /app
 # Environment configuration
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    RUNS_DIR=/app/runs
+    RUNS_DIR=/app/runs \
+    ISP_CHECKER_CLI=/usr/local/bin/isp-checker
 
-# Switch to non-root user
-USER appuser
+# Note: Running as root for packet capture capabilities
+# In production, use capabilities on the binary instead
+# USER appuser
 
 EXPOSE 8000
 

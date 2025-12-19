@@ -7,10 +7,10 @@ from typing import List, Optional
 import uuid
 from datetime import datetime
 
-from .. import models
-from ..db import database, runs, probes
-from ..middleware.auth import get_current_user, AuthenticatedUser, APIKeyAuth
-from ..workers.probe_runner import execute_health_check
+import models
+from db import database, runs, probes
+from middleware.auth import get_current_user, AuthenticatedUser, APIKeyAuth
+from workers.probe_runner import execute_health_check
 
 router = APIRouter()
 
@@ -39,7 +39,32 @@ async def submit_or_start_run(
 
     # Check if this is a request to start a new run or to store existing data
     if not run.probes:
-        # No probe data - initiate background health check
+        # No probe data - create a pending record and initiate background health check
+        pending_report = {
+            "run_id": run_id,
+            "target": run.target,
+            "mode": run.mode,
+            "score": 0,
+            "summary": "Health check in progress...",
+            "probes": [],
+            "diagnosis": [],
+            "status": "pending",
+        }
+
+        # Create the pending run record immediately so UI can fetch it
+        query = runs.insert().values(
+            run_id=run_id,
+            user_id=user_id,
+            timestamp=datetime.utcnow(),
+            target=run.target,
+            mode=run.mode,
+            score=0,
+            summary="Health check in progress...",
+            report=pending_report,
+        )
+        await database.execute(query)
+
+        # Start background task to run actual health check
         background_tasks.add_task(
             execute_health_check,
             run_id=run_id,

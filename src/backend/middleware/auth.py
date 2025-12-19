@@ -10,7 +10,7 @@ from fastapi import HTTPException, Security, Depends, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
-from ..db import database, api_keys, users
+from db import database, api_keys, users
 
 # API Key header configuration
 API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)

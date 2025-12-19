@@ -10,7 +10,7 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
 
-from ..db import database, runs
+from db import database, runs
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -19,8 +19,38 @@ logger = logging.getLogger(__name__)
 # Path to the Go CLI binary
 CLI_BINARY = os.getenv("ISP_CHECKER_CLI", "/usr/local/bin/isp-checker")
 
-# Timeout for CLI execution (seconds)
+# Base timeout for CLI execution (seconds)
 CLI_TIMEOUT = int(os.getenv("CLI_TIMEOUT", "60"))
+
+# Mode-specific timeouts (seconds)
+MODE_TIMEOUTS = {
+    "quick": 30,
+    "ping": 30,
+    "dns": 30,
+    "traceroute": 45,
+    "standard": 60,
+    "full": 60,
+    "comprehensive": 120,
+    "capture": 120,
+}
+
+# Mode mapping: UI/API mode -> CLI type
+MODE_MAPPING = {
+    "quick": "ping",
+    "standard": "full",
+    "comprehensive": "comprehensive",
+    "capture": "capture",
+    # Direct CLI modes pass through
+    "ping": "ping",
+    "dns": "dns",
+    "traceroute": "traceroute",
+    "full": "full",
+}
+
+
+def get_cli_type(mode: str) -> str:
+    """Convert UI/API mode to CLI type."""
+    return MODE_MAPPING.get(mode.lower(), "full")
 
 
 async def execute_health_check(
@@ -92,12 +122,20 @@ async def run_cli_probe(target: str, mode: str) -> Dict[str, Any]:
         # Fall back to running via go run or using simulation
         return await run_simulation_probe(target, mode)
 
+    # Convert API mode to CLI type
+    cli_type = get_cli_type(mode)
+    logger.info(f"Mapping mode '{mode}' to CLI type '{cli_type}'")
+
+    # Get mode-specific timeout
+    timeout = MODE_TIMEOUTS.get(mode.lower(), CLI_TIMEOUT)
+    logger.info(f"Using timeout of {timeout}s for mode '{mode}'")
+
     # Build the CLI command
     cmd = [
         CLI_BINARY,
         "run",
-        "--target", target,
-        "--type", mode,
+        "-target", target,
+        "-type", cli_type,
     ]
 
     # Run the CLI asynchronously
@@ -110,7 +148,7 @@ async def run_cli_probe(target: str, mode: str) -> Dict[str, Any]:
     try:
         stdout, stderr = await asyncio.wait_for(
             process.communicate(),
-            timeout=CLI_TIMEOUT
+            timeout=timeout
         )
     except asyncio.TimeoutError:
         process.kill()
@@ -151,7 +189,7 @@ async def run_simulation_probe(target: str, mode: str) -> Dict[str, Any]:
     if mode in ["full", "ping"]:
         probes_result.append({
             "name": "ping",
-            "status": "ok",
+            "status": "OK",
             "latency_ms": 25.5,
             "details": {
                 "packets_sent": 3,
@@ -166,7 +204,7 @@ async def run_simulation_probe(target: str, mode: str) -> Dict[str, Any]:
     if mode in ["full", "dns"]:
         probes_result.append({
             "name": "dns",
-            "status": "ok",
+            "status": "OK",
             "latency_ms": 12.3,
             "details": {
                 "resolution_time": "12.3ms",
@@ -177,7 +215,7 @@ async def run_simulation_probe(target: str, mode: str) -> Dict[str, Any]:
     if mode in ["full", "traceroute"]:
         probes_result.append({
             "name": "traceroute",
-            "status": "ok",
+            "status": "OK",
             "latency_ms": 150.0,
             "details": {
                 "hops": 8,
@@ -186,7 +224,7 @@ async def run_simulation_probe(target: str, mode: str) -> Dict[str, Any]:
         })
 
     # Calculate score based on probe results
-    ok_count = sum(1 for p in probes_result if p["status"] == "ok")
+    ok_count = sum(1 for p in probes_result if p["status"] == "OK")
     total_count = len(probes_result)
     score = (ok_count / total_count * 100) if total_count > 0 else 0
 
@@ -248,16 +286,14 @@ async def store_run_result(
     user_id: Optional[int] = None
 ):
     """
-    Store the run result in the database.
+    Update the run result in the database.
+    The pending record should already exist from the API layer.
     """
     timestamp = datetime.fromisoformat(result.get("timestamp", datetime.utcnow().isoformat()))
 
-    query = runs.insert().values(
-        run_id=run_id,
-        user_id=user_id,
+    # Update the existing pending record with the actual results
+    query = runs.update().where(runs.c.run_id == run_id).values(
         timestamp=timestamp,
-        target=result.get("target", "unknown"),
-        mode=result.get("mode", "unknown"),
         score=result.get("score", 0),
         summary=result.get("summary", ""),
         report=result,
@@ -265,9 +301,9 @@ async def store_run_result(
 
     try:
         await database.execute(query)
-        logger.info(f"Stored run result for run_id={run_id}")
+        logger.info(f"Updated run result for run_id={run_id}")
     except Exception as e:
-        logger.error(f"Failed to store run result for run_id={run_id}: {e}")
+        logger.error(f"Failed to update run result for run_id={run_id}: {e}")
         raise
 
 

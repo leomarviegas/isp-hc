@@ -56,6 +56,32 @@ const ScoreMeter = ({ score }) => {
   );
 };
 
+// Helper to format probe details nicely
+const formatProbeDetails = (probe) => {
+  if (!probe.details) return null;
+
+  // For probes with raw text output (ping, traceroute), show the text nicely
+  if (probe.details.raw && typeof probe.details.raw === 'string') {
+    return (
+      <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded font-mono whitespace-pre-wrap max-h-64 overflow-y-auto">
+        {probe.details.raw}
+      </pre>
+    );
+  }
+
+  // For other probes, show JSON but exclude verbose fields
+  const displayDetails = { ...probe.details };
+  delete displayDetails.raw; // Already shown above if present
+
+  if (Object.keys(displayDetails).length === 0) return null;
+
+  return (
+    <pre className="text-xs bg-gray-50 p-2 rounded overflow-x-auto max-h-48 overflow-y-auto">
+      {JSON.stringify(displayDetails, null, 2)}
+    </pre>
+  );
+};
+
 const RunDetails = () => {
   const { runId } = useParams();
   const navigate = useNavigate();
@@ -64,9 +90,24 @@ const RunDetails = () => {
   const [showRaw, setShowRaw] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Check if run is still pending
+  const isPending = selectedRun?.summary?.includes('in progress') ||
+                    (selectedRun?.score === 0 && (!selectedRun?.probes || selectedRun?.probes?.length === 0));
+
   useEffect(() => {
     fetchRun(runId);
   }, [runId, fetchRun]);
+
+  // Auto-refresh when run is pending
+  useEffect(() => {
+    if (!isPending) return;
+
+    const intervalId = setInterval(() => {
+      fetchRun(runId);
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(intervalId);
+  }, [isPending, runId, fetchRun]);
 
   const handleShowRaw = async () => {
     if (!rawOutput) {
@@ -170,7 +211,17 @@ const RunDetails = () => {
           </div>
           <div>
             <dt className="text-sm font-medium text-gray-500">Summary</dt>
-            <dd className="mt-1 text-sm text-gray-900">{run.summary}</dd>
+            <dd className="mt-1 text-sm text-gray-900 flex items-center gap-2">
+              {run.summary}
+              {isPending && (
+                <span className="inline-flex items-center">
+                  <svg className="animate-spin h-4 w-4 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                </span>
+              )}
+            </dd>
           </div>
         </div>
         <div className="mt-6">
@@ -204,17 +255,21 @@ const RunDetails = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {probe.latency_ms ? `${probe.latency_ms.toFixed(2)} ms` : '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {probe.details && (
-                        <pre className="text-xs bg-gray-50 p-2 rounded overflow-x-auto">
-                          {JSON.stringify(probe.details, null, 2)}
-                        </pre>
-                      )}
+                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xl">
+                      {formatProbeDetails(probe)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        ) : isPending ? (
+          <div className="flex items-center gap-3 text-sm text-indigo-600">
+            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Running health check probes...
           </div>
         ) : (
           <p className="text-sm text-gray-500">No probe results available.</p>

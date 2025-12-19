@@ -39,7 +39,18 @@ func runCommand(ctx context.Context, args []string) error {
 		SimulationPath: *simPath,
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	// Set timeout based on mode - comprehensive needs longer for all probes
+	timeout := 30 * time.Second
+	switch *runType {
+	case "comprehensive", "capture":
+		timeout = 120 * time.Second // More time for packet capture and all probes
+	case "full":
+		timeout = 60 * time.Second // Ping, DNS, traceroute
+	case "traceroute":
+		timeout = 45 * time.Second // Traceroute can be slow
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	result, err := ExecuteRun(ctx, opts)

@@ -7,12 +7,21 @@ services:
       dockerfile: docker/Dockerfile.backend
     ports:
       - "8000:8000"
+    # Required for packet capture and network diagnostics
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
     environment:
       - DATABASE_URL=postgresql://user:password@db/isp_health_checker
+      - DISABLE_AUTH=true
+      - HOST_PROC=/host/proc
+      - HOST_SYS=/host/sys
     depends_on:
       - db
     volumes:
       - ./src/backend:/app
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
 
   db:
     image: postgres:14-alpine

@@ -12,10 +12,10 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 import uvicorn
 
-from .api import runs
-from .db import connect_db, disconnect_db
-from .middleware.rate_limit import RateLimitMiddleware, RateLimitConfig
-from .workers.probe_runner import get_worker_pool
+from api import runs
+from db import connect_db, disconnect_db
+from middleware.rate_limit import RateLimitMiddleware, RateLimitConfig
+from workers.probe_runner import get_worker_pool
 
 # Configure logging
 logging.basicConfig(
@@ -119,7 +119,7 @@ async def readiness_check():
     Readiness check endpoint.
     Verifies database connectivity.
     """
-    from .db import database
+    from db import database
 
     try:
         # Test database connection

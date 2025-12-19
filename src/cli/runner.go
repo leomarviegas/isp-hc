@@ -89,10 +89,16 @@ func ExecuteRun(ctx context.Context, opts RunOptions) (RunResult, error) {
 		Raw:       map[string]interface{}{},
 	}
 
-	score, summary, diag := analyzer.Analyze(probeResults)
+	score, summary, detailedDiag := analyzer.AnalyzeDetailed(probeResults)
 	result.Score = score
 	result.Summary = summary
-	result.Diagnosis = toDiagnosis(diag)
+	// Use detailed diagnosis with confidence, fallback to simple if empty
+	if len(detailedDiag) > 0 {
+		result.Diagnosis = toDetailedDiagnosis(detailedDiag)
+	} else {
+		_, _, simpleDiag := analyzer.Analyze(probeResults)
+		result.Diagnosis = toDiagnosis(simpleDiag)
+	}
 	recordRunMetrics(result)
 	return result, nil
 }
@@ -133,7 +139,7 @@ func loadSimulation(path string) (RunResult, error) {
 	if res.Probes == nil {
 		res.Probes = []probes.Result{}
 	}
-	score, summary, diag := analyzer.Analyze(res.Probes)
+	score, summary, detailedDiag := analyzer.AnalyzeDetailed(res.Probes)
 	if res.Score == 0 {
 		res.Score = score
 	}
@@ -141,7 +147,12 @@ func loadSimulation(path string) (RunResult, error) {
 		res.Summary = summary
 	}
 	if len(res.Diagnosis) == 0 {
-		res.Diagnosis = toDiagnosis(diag)
+		if len(detailedDiag) > 0 {
+			res.Diagnosis = toDetailedDiagnosis(detailedDiag)
+		} else {
+			_, _, simpleDiag := analyzer.Analyze(res.Probes)
+			res.Diagnosis = toDiagnosis(simpleDiag)
+		}
 	}
 	return res, nil
 }
@@ -195,6 +206,20 @@ func toDiagnosis(diag []string) []map[string]interface{} {
 	out := make([]map[string]interface{}, 0, len(diag))
 	for _, d := range diag {
 		out = append(out, map[string]interface{}{"message": d})
+	}
+	return out
+}
+
+func toDetailedDiagnosis(diag []analyzer.DiagnosticResult) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(diag))
+	for _, d := range diag {
+		out = append(out, map[string]interface{}{
+			"component":        d.Component,
+			"confidence":       d.Confidence,
+			"explanation":      d.Explanation,
+			"suggested_action": d.SuggestedAction,
+			"severity":         d.Severity,
+		})
 	}
 	return out
 }

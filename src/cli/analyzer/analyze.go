@@ -65,13 +65,56 @@ func Analyze(results []probes.Result) (float64, string, []string) {
 
 // AnalyzeDetailed returns structured diagnostic results.
 func AnalyzeDetailed(results []probes.Result) (float64, string, []DiagnosticResult) {
-	score, summary, _ := Analyze(results)
+	score, summary, simpleDiag := Analyze(results)
 
 	diagnostics := []DiagnosticResult{}
 
+	// Collect specific issues from detailed analysis
 	for _, p := range results {
 		diag := analyzeProbeResult(p)
 		diagnostics = append(diagnostics, diag...)
+	}
+
+	// Add overall health status based on score
+	if score >= 90 {
+		diagnostics = append(diagnostics, DiagnosticResult{
+			Component:       "Overall",
+			Confidence:      1.0,
+			Explanation:     "All network probes completed successfully",
+			SuggestedAction: "No action required - network is healthy",
+			Severity:        "info",
+		})
+	} else if score >= 70 {
+		diagnostics = append(diagnostics, DiagnosticResult{
+			Component:       "Overall",
+			Confidence:      0.85,
+			Explanation:     "Network is functional with minor issues",
+			SuggestedAction: "Review warnings and monitor for patterns",
+			Severity:        "info",
+		})
+	} else {
+		diagnostics = append(diagnostics, DiagnosticResult{
+			Component:       "Overall",
+			Confidence:      0.9,
+			Explanation:     "Network has significant issues requiring attention",
+			SuggestedAction: "Address critical issues identified above",
+			Severity:        "warning",
+		})
+	}
+
+	// Include any additional info messages from simple analysis
+	for _, msg := range simpleDiag {
+		// Skip the generic "all probes succeeded" message
+		if msg == "all probes succeeded - no issues detected" {
+			continue
+		}
+		diagnostics = append(diagnostics, DiagnosticResult{
+			Component:       "Network",
+			Confidence:      0.8,
+			Explanation:     msg,
+			SuggestedAction: "Review for potential issues",
+			Severity:        "info",
+		})
 	}
 
 	return score, summary, diagnostics
